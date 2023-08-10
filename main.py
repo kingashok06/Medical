@@ -1,18 +1,48 @@
 from fastapi import FastAPI,HTTPException
 from routes.user_routes import user
-from models.user_model import User
 from config.db import collection,EMAIL_CONFIG
 import bcrypt
-import uuid
-import smtplib
-from email.mime.text import MIMEText
+import string
+import csv
+from io import StringIO
+from typing import List, Dict
+from fastapi import FastAPI, Response,HTTPException,UploadFile,File
+from pydantic import BaseModel
+import os
+from Bio import Entrez
+import random
+from random import randint
+from models.user_model import ProfileUpdate,User,PasswordResetRequest,login
+from fastapi import UploadFile,File,APIRouter,HTTPException
+# from Model.model import User, profileUpdate, login
+# from Model.model import ResetPasswordRequest
+from config.db import collection
 from bson import ObjectId
-import secrets
+from fastapi.responses import JSONResponse
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+import smtplib
+import os
+from dotenv import load_dotenv, dotenv_values
+
+load_dotenv()
+
+# Initialize the Entrez email (required by PubMed API)
+Entrez.email = "uddhavsirsat12@email.com"
+
+# Create a FastAPI instance
 app = FastAPI()
+
+routers = APIRouter()
+
+class ResetPasswordRequest(BaseModel):
+ email: str
+
 
 
 app.include_router(user)
 
+##Endpoint to register using POST method
 @app.post("/register/")
 async def register_user(user: User):
     # Check if the user already exists based on email or username
@@ -64,29 +94,9 @@ def send_confirmation_email(to_email: str, confirmation_link: str):
         server.sendmail(EMAIL_CONFIG["SENDER_EMAIL"], to_email, msg.as_string())
 
 
-import string
-import random
-from random import randint
-from models.user_model import ProfileUpdate,User,PasswordResetRequest,login
-from fastapi import UploadFile,File,APIRouter,HTTPException
-# from Model.model import User, profileUpdate, login
-# from Model.model import ResetPasswordRequest
-from config.db import collection
-from bson import ObjectId
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-
-routers = APIRouter()
 
 
-class ResetPasswordRequest(BaseModel):
- email: str
-
+#Endpoint to register using POST method
 @routers.post("/register")
 async def register_user(user:User):
  new_user = {
@@ -128,7 +138,7 @@ async def edit_profile(
     return JSONResponse(content={"message": "Profile updated successfully"})
 
 
-
+#Endpoint to login profile using POST method
 @routers.post("/login/User")
 async def user_login(login_data: login):
  user = collection.find_one({"username": login_data.username})
@@ -140,13 +150,13 @@ async def user_login(login_data: login):
 
 reset_tokens = {}
 
-
+# generate random password
 def generate_random_string(length):
    letters_and_digits = string.ascii_letters + string.digits
    return ''.join(random.choice(letters_and_digits) for _ in range(length))
 
+# Endpoint to forgot password using POST method
 @routers.post("/forgot-password/user")
-# @app.post("/forgot-password")
 async def forgot_password(request: ResetPasswordRequest):
  user = collection.find_one({"email": request.email})
  if user:
@@ -159,14 +169,14 @@ async def forgot_password(request: ResetPasswordRequest):
 
 
      
-
+#sening mail by using sftp connection
 def send_reset_email(email, reset_token):
     # Configure your SMTP settings
     smtp_host = "smtp.gmail.com"
     smtp_port = 587
-    smtp_username = "uddhavsirsat12@gmail.com"
-    app_password = "weycahucciwloyei"
-    sender_email = "uddhavsirsat12@gmail.com"
+    smtp_username = "rest_pass"
+    app_password = os.getenv("HOST_PASSWORD")
+    sender_email = os.getenv("HOST_EMAIL")
     subject = "Password Reset"
     
     # Corrected URL format
@@ -192,28 +202,14 @@ def send_reset_email(email, reset_token):
 
 
 
-import csv
-from io import StringIO
-from typing import List, Dict
-from fastapi import FastAPI, Response,HTTPException,UploadFile,File
-from pydantic import BaseModel
-import os
-from Bio import Entrez
-
-# Initialize the Entrez email (required by PubMed API)
-Entrez.email = "uddhavsirsat12@email.com"
-
-# Create a FastAPI instance
-app = FastAPI()
-
 # Define the response model for the article["key"]["PubmedArticle"][0]["MedlineCitation"]
 class ArticleResponseModel(BaseModel):
     key: Dict
 
+#search data from pubmed 
 @app.get("/search/{query}")
 async def search_pubmed(query: str):
     articles = []
-    
     # Perform the PubMed search
     handle = Entrez.esearch(db="pubmed", term=query, retmax=10)
     record = Entrez.read(handle)
@@ -225,8 +221,6 @@ async def search_pubmed(query: str):
         article_record = Entrez.read(article_handle)
         article_handle.close()
         articles.append({"key": article_record})
-        # print(articles)
-    
     for article in articles:
         csv_data = []
         title = article["key"]["PubmedArticle"][0]["MedlineCitation"]["Article"]["ArticleTitle"] 
@@ -246,6 +240,7 @@ async def search_pubmed(query: str):
             writer.writerows(csv_data)
         print("CSV file has been created successfully.")
 
+#Download all data from pubmed
 @app.get("/all_data/{query}")
 async def search_pubmed(query: str):
     articles = []
@@ -261,8 +256,6 @@ async def search_pubmed(query: str):
         article_record = Entrez.read(article_handle)
         article_handle.close()
         articles.append({"key": article_record})
-        # print(articles)
-    
     for article in articles:
         csv_data = []
         title = article["key"]["PubmedArticle"][0]["MedlineCitation"]["Article"]["ArticleTitle"] 
@@ -286,6 +279,8 @@ async def search_pubmed(query: str):
             writer.writerows(csv_data)
         print("CSV file has been created successfully.")
 
+
+#Download csv file in specific folder
 @app.get("/download-csv/{csv_file_path}")
 async def download_csv(csv_file_path: str):
     # Define the folder path where the CSV file is located
