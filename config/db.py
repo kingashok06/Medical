@@ -6,6 +6,12 @@ collection = db["collection_name"]
 
 
 
+# client = MongoClient("mongodb://localhost:27017/")
+# db = client["user_db"]
+# collection = db["users"]
+
+
+
 EMAIL_CONFIG = {
     "SMTP_SERVER": "smtp.gmail.com",
     "SMTP_PORT": 587,
