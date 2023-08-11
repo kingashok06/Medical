@@ -1,20 +1,13 @@
-from pydantic import BaseModel,UUID4
+from pydantic import BaseModel
 from typing import List
 
 
 
-
-
-# class Member(BaseModel):
-#     member_name: str
-
-
-class RequestGroup(BaseModel):
+class Group(BaseModel):
     group_name: str
+    
     add_members: List[str]
 
-
-class Group(BaseModel): 
-    group_name:str
+class Member(BaseModel): 
     member_name:str
 
