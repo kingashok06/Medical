@@ -1,14 +1,14 @@
 from pymongo import MongoClient
 
-db_connection = MongoClient("mongodb://localhost:27017")
-db = db_connection.database_name
-collection = db["collection_name"]
+# db_connection = MongoClient("mongodb://localhost:27017")
+# db = db_connection.database_name
+# collection = db["collection_name"]
 
 
 
-# client = MongoClient("mongodb://localhost:27017/")
-# db = client["user_db"]
-# collection = db["users"]
+db_connection = MongoClient("mongodb://localhost:27017/")
+db = db_connection["user_db"]
+collection = db["users"]
 
 
 

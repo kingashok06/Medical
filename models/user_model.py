@@ -1,11 +1,14 @@
-from pydantic import BaseModel,EmailStr
+from pydantic import BaseModel,EmailStr,constr
+from datetime import date, datetime
+from fastapi import UploadFile
+
 
 class User(BaseModel):
     username: str
+    contact: int 
     email : EmailStr
-    password: str
-    confirmpassword: str
-    is_email_confirmed: bool = False
+    password: str   
+    # is_email_confirmed: bool = False
 
 
 class login(BaseModel):
@@ -20,3 +23,11 @@ class UserProfile(BaseModel):
     username: str
     email : str
 
+
+class AddMonitor(BaseModel):
+    monitorname: str
+    specialsituation: str 
+    description : str 
+    start_date: datetime
+    end_date: datetime
+    excel_file: str
