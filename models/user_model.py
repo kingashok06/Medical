@@ -31,3 +31,14 @@ class AddMonitor(BaseModel):
     start_date: datetime
     end_date: datetime
     excel_file: str
+    # file: UploadFile
+
+
+class TeamCreate(BaseModel):
+    teamname: str
+    description: str
+
+
+class TeamMember(BaseModel):
+    team_id: str
+    username: str  # Assuming this is the existing username

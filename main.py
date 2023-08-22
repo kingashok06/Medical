@@ -2,7 +2,7 @@ from fastapi import FastAPI,HTTPException,Response,Request,Depends,Query
 from routes.user_routes import user
 from config.db import collection,EMAIL_CONFIG
 from pydantic import ValidationError
-from models.user_model import User,login,ChangePasswordRequest,UserProfile,AddMonitor
+from models.user_model import User,login,ChangePasswordRequest,UserProfile,AddMonitor,TeamCreate, TeamMember
 import smtplib
 from email.mime.text import MIMEText
 from bson import ObjectId
@@ -16,6 +16,15 @@ from fastapi.responses import JSONResponse,RedirectResponse
 from starlette.requests import Request
 from datetime import datetime, timedelta
 from jose import JWTError
+import pandas as pd
+from fastapi import File, UploadFile
+from io import BytesIO
+import mimetypes
+from fastapi import FastAPI
+from pydantic import BaseModel, EmailStr
+from pymongo import MongoClient
+from bson import ObjectId
+
 
 
 app = FastAPI()
@@ -253,6 +262,63 @@ async def add_monitor(
     return JSONResponse(content={"message": "User not authenticated"}, status_code=401)
 
 
+# Function to determine the file format (Excel or CSV)
+# def get_file_format(file: UploadFile) -> str:
+#     mime_type, _ = mimetypes.guess_type(file.filename)
+#     if mime_type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+#         return 'excel'
+#     elif mime_type == 'text/csv':
+#         return 'csv'
+#     else:
+#         return 'unknown'
+    
+# @app.post('/add_monitor')
+# async def add_monitor(monitor: AddMonitor, current_user: dict = Depends(JWTBearer())):
+#     if current_user.get('_id'):
+#         # Retrieve the user's id from the JWT payload 
+#         user_id  = current_user.get('_id')
+#         username = current_user.get('username')
+
+#         if monitor.monitorname and monitor.file: 
+#             # Determine the file format (excel or csv)
+#             file_format = get_file_format(monitor.file)
+
+#             if file_format == 'unknown':
+#                 return JSONResponse(content={'message': 'Invalid file_format'}, status_code=400)
+            
+#             # Process the file based on its format 
+#             if file_format == 'excel':
+#                 # Process the Excel file 
+#                 file_contents = await monitor.file.read()
+#                 df = pd.read_excel(BytesIO(file_contents))
+#             elif file_format == 'csv':
+#                 # Process the CSV file (corrected from pd.read_excel to pd.read_csv)
+#                 file_contents = await monitor.file.read()
+#                 df = pd.read_csv(BytesIO(file_contents))
+
+#             monitor_data  = {
+#                 'username': username , 
+#                 'user_id' : user_id, 
+#                 'monitorname' : monitor.monitorname, 
+#                 'specialsituation': monitor.specialsituation, 
+#                 'description': monitor.description, 
+#                 'start_date': monitor.start_date, 
+#                 'end_date' : monitor.end_date, 
+#                 'file_format' : file_format # Store the file format 
+#             }
+
+#             # Insert the data
+#             collection.insert_one(monitor_data)
+
+#             # Return a confirmation message 
+#             confirmation_message = f"Monitor '{monitor.monitorname}' has been added successfully."
+#             return {'message': confirmation_message}
+
+#     return JSONResponse(content={'message' :'User not authenticated'}, status_code=401)
+
+
+            
+
 
 @app.get('/user_monitors/{username}/{monitor_name}', response_model=list[dict])
 async def get_user_monitor(
@@ -293,6 +359,7 @@ async def update_user_monitor(
         # Create an update query based on the provided monitor data
         update_query = {
             "$set": {
+                'monitorname': monitor_data.monitorname,
                 "specialsituation": monitor_data.specialsituation,
                 "description": monitor_data.description,
                 "start_date": monitor_data.start_date,
@@ -338,3 +405,121 @@ async def delete_user_monitor(
         return {"message": f"Monitor '{monitorname}' has been deleted successfully"}
     else:
         raise HTTPException(status_code=403, detail="Access denied: You can only delete your own data")
+
+
+#3######################################################################################################################3
+
+
+
+
+from bson import ObjectId
+
+class TeamCreate(BaseModel):
+    teamname: str
+    description: str
+
+class TeamMember(BaseModel):
+    team_id: str
+    username: str  # Use the existing username
+
+@app.post('/create_team')
+async def create_team(team: TeamCreate, current_user: dict = Depends(JWTBearer())):
+    if current_user.get("_id"):
+        # Retrieve the user's _id from the JWT payload
+        user_id = current_user.get("_id")
+        username = current_user.get('username')
+
+        if team.teamname and team.description:
+            # Create a new team document
+            team_data = {
+                'teamname': team.teamname,
+                'description': team.description,
+                'creator_id': user_id,  # Associate the team creator's _id
+                'members': [{"user_id": user_id, "username": username, "role": "admin"}]  # Initialize the members list with the creator as admin
+            }
+            team_id = collection.insert_one(team_data).inserted_id
+
+            # Return a confirmation message
+            confirmation_message = f"Team '{team.teamname}' has been created successfully."
+            return {'message': confirmation_message, 'team_id': str(team_id)}
+
+    return JSONResponse(content={"message": "User not authenticated"}, status_code=401)
+
+
+
+
+
+@app.post('/add_member_to_team')
+async def add_member_to_team(member: TeamMember):
+    team_id = ObjectId(member.team_id)
+    username = member.username  # Use the provided username
+
+    # Debug: Print the username to see what's being used for the lookup
+    print(f"Looking up user with username: {username}")
+
+    # Check if the team exists
+    team = collection.find_one({"_id": team_id})
+    if not team:
+        return {"error": "Team not found"}
+
+    # Verify that the user exists by username from the users.users collection
+    # Use the correct collection name here (users.users)
+    user = collection.users.find_one({"username": username})
+
+    if not user:
+        # Debug: Print a message indicating that the user was not found
+        print(f"User with username {username} not found in the users.users collection")
+
+        return {"error": "User not found"}
+
+    # Add the member to the team using the existing user ID
+    collection.update_one(
+        {"_id": team_id},
+        {"$addToSet": {"members": {"user_id": str(user["_id"]), "username": user["username"]}}}
+    )
+    return {"message": f"{user['username']} added to the team."}
+
+
+
+
+@app.delete('/remove_member_from_team')
+async def remove_member_from_team(member: TeamMember, current_user: dict = Depends(JWTBearer())):
+    if current_user.get("_id"):
+        # Retrieve the user's _id from the JWT payload
+        user_id = current_user.get("_id")
+        username = current_user.get('username')
+
+        team_id = ObjectId(member.team_id)
+        username_to_remove = member.username  # The username of the user to remove
+
+        # Check if the team exists
+        team = collection.find_one({"_id": team_id})
+        if not team:
+            return {"error": "Team not found"}
+
+        # Verify that the user exists by username from the users.users collection
+        user = collection.users.find_one({"username": username})
+
+        if not user:
+            return {"error": "User not found"}
+
+        # Check if the user trying to remove a member is an admin of the team
+        is_admin = any(member['user_id'] == str(user['_id']) and member.get('role') == 'admin' for member in team['members'])
+
+        if not is_admin:
+            raise HTTPException(status_code=403, detail="Only admins can remove members from the team")
+
+        # Find the user to remove by username
+        user_to_remove = collection.users.find_one({"username": username_to_remove})
+
+        if not user_to_remove:
+            return {"error": "User to remove not found"}
+
+        # Remove the user from the team
+        collection.update_one(
+            {"_id": team_id},
+            {"$pull": {"members": {"user_id": str(user_to_remove["_id"])}}}
+        )
+        return {"message": f"{user_to_remove['username']} removed from the team."}
+
+    return JSONResponse(content={"message": "User not authenticated"}, status_code=401)
