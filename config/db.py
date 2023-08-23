@@ -22,7 +22,7 @@ EMAIL_CONFIG = {
     "SMTP_SERVER": "smtp.gmail.com",
     "SMTP_PORT": 587,
     "smtp_username":"uddhavsirsat12@gmail.com",
-    "SENDER_EMAIL": "HOST_EMAIL",
-    "SENDER_PASSWORD": "HOST_PASSWORD",
+    "SENDER_EMAIL": "uddhavsirsat12@gmail.com",
+    "SENDER_PASSWORD": "cedayvubegjkgwst",
 }
 
