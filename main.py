@@ -281,7 +281,7 @@ async def edit_profile(
         update_data['photo_path'] = photo_path
 
     # Update the user data in MongoDB
-    collection.update_one({"_id": ObjectId(user_id)}, {"$set": update_data})
+    collection.update_one({"_id": ObjectId(username)}, {"$set": update_data})
 
     return JSONResponse(content={"message": "Profile updated successfully"})
 
