@@ -19,7 +19,7 @@ from jose import JWTError
 import pandas as pd
 from fastapi import File, UploadFile
 from io import BytesIO
-import mimetypes
+import re
 from fastapi import FastAPI
 from pydantic import BaseModel, EmailStr
 from pymongo import MongoClient
@@ -120,6 +120,10 @@ async def register_user(user: User):
     if not validate_contact(user.contact):
         error_msg = "Invalid contact number. Contact number should have exactly 10 digits."
         raise HTTPException(status_code=400, detail=error_msg)
+    
+    pattern = r"^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]+$"
+    if not re.match(pattern, user.password):
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long and contain at least one letter, one digit, and one special character.")
 
     confirmation_token = str(ObjectId())
     hashed_password = bcrypt.hashpw(user.password.encode("utf-8"), bcrypt.gensalt())
@@ -412,15 +416,9 @@ async def delete_user_monitor(
 
 
 
-from bson import ObjectId
 
-class TeamCreate(BaseModel):
-    teamname: str
-    description: str
 
-class TeamMember(BaseModel):
-    team_id: str
-    username: str  # Use the existing username
+
 
 @app.post('/create_team')
 async def create_team(team: TeamCreate, current_user: dict = Depends(JWTBearer())):
@@ -445,10 +443,6 @@ async def create_team(team: TeamCreate, current_user: dict = Depends(JWTBearer()
 
     return JSONResponse(content={"message": "User not authenticated"}, status_code=401)
 
-
-
-
-
 @app.post('/add_member_to_team')
 async def add_member_to_team(member: TeamMember):
     team_id = ObjectId(member.team_id)
@@ -456,6 +450,8 @@ async def add_member_to_team(member: TeamMember):
 
     # Debug: Print the username to see what's being used for the lookup
     print(f"Looking up user with username: {username}")
+
+    confirmation_tok = str(ObjectId())
 
     # Check if the team exists
     team = collection.find_one({"_id": team_id})
@@ -471,7 +467,20 @@ async def add_member_to_team(member: TeamMember):
         print(f"User with username {username} not found in the users.users collection")
 
         return {"error": "User not found"}
+    create_team_link = f"https://www.google.com/?token={confirmation_tok}"
+    
+    # Get the user's email from the user document
+    user_email = user.get("email")
+ 
+    if not user_email:
+        # Handle the case where the user document does not have an email
+        print(f"Email not found for user with username {username}")
+        return {"error": "Email not found"}
 
+    create_team_link = f"https://www.google.com/?token={confirmation_tok}"
+
+    # Send the confirmation email
+    send_confirmation_email(user_email, create_team_link)
     # Add the member to the team using the existing user ID
     collection.update_one(
         {"_id": team_id},
@@ -479,8 +488,20 @@ async def add_member_to_team(member: TeamMember):
     )
     return {"message": f"{user['username']} added to the team."}
 
+def send_confirmation_email(to_email: str, confirmation_link: str):
+    subject = "Account Created"
+    body = f"Hello,\n\nThank you for registering with our service. Your account has been successfully created.\n\nPlease click on the link below to confirm your email address:\n\n{confirmation_link}"
 
+    msg = MIMEText(body)
+    msg["From"] = EMAIL_CONFIG["SENDER_EMAIL"]
+    msg["To"] = to_email
+    msg["Subject"] = subject
 
+    # Connect to the SMTP server and send the email
+    with smtplib.SMTP(EMAIL_CONFIG["SMTP_SERVER"], EMAIL_CONFIG["SMTP_PORT"]) as server:
+        server.starttls()
+        server.login(EMAIL_CONFIG["SENDER_EMAIL"], EMAIL_CONFIG["SENDER_PASSWORD"])
+        server.sendmail(EMAIL_CONFIG["SENDER_EMAIL"], to_email, msg.as_string())
 
 @app.delete('/remove_member_from_team')
 async def remove_member_from_team(member: TeamMember, current_user: dict = Depends(JWTBearer())):

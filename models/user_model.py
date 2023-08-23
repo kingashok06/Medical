@@ -7,7 +7,8 @@ class User(BaseModel):
     username: str
     contact: int 
     email : EmailStr
-    password: str   
+    password: constr(min_length=8)
+    # password: str   
     # is_email_confirmed: bool = False
 
 
@@ -33,12 +34,14 @@ class AddMonitor(BaseModel):
     excel_file: str
     # file: UploadFile
 
-
 class TeamCreate(BaseModel):
     teamname: str
     description: str
 
-
 class TeamMember(BaseModel):
     team_id: str
-    username: str  # Assuming this is the existing username
+    username: str  # Use the existing username
+
+
+
+
