@@ -18,7 +18,7 @@ class login(BaseModel):
    
 class ChangePasswordRequest(BaseModel):
     current_password: str
-    new_password: str
+    new_password: constr(min_length=8)
 
 class UserProfile(BaseModel):
     username: str

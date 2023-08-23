@@ -215,6 +215,15 @@ async def change_password(request: ChangePasswordRequest, current_user: str):
     if not bcrypt.checkpw(request.current_password.encode("utf-8"), stored_password.encode("utf-8")):
         raise HTTPException(status_code=401, detail="Invalid current password")
     
+
+
+    # Check if the new password meets complexity requirements
+    pattern = r"^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]+$"
+    if not re.match(pattern, request.new_password):
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters long and contain at least one letter, one digit, and one special character.")
+    
+    
+    
     new_hashed_password = bcrypt.hashpw(request.new_password.encode("utf-8"), bcrypt.gensalt())
     # Update the password in the database
     collection.users.update_one({"username": current_user}, {"$set": {"password": new_hashed_password.decode("utf-8")}})
@@ -413,13 +422,6 @@ async def delete_user_monitor(
 
 #3######################################################################################################################3
 
-
-
-
-
-
-
-
 @app.post('/create_team')
 async def create_team(team: TeamCreate, current_user: dict = Depends(JWTBearer())):
     if current_user.get("_id"):
@@ -490,7 +492,7 @@ async def add_member_to_team(member: TeamMember):
 
 def send_confirmation_email(to_email: str, confirmation_link: str):
     subject = "Account Created"
-    body = f"Hello,\n\nThank you for registering with our service. Your account has been successfully created.\n\nPlease click on the link below to confirm your email address:\n\n{confirmation_link}"
+    body = f"Hello,\n\nYour have  been successfully added to the team.\n\nPlease click on the link below to confirm your email address:\n\n{confirmation_link}"
 
     msg = MIMEText(body)
     msg["From"] = EMAIL_CONFIG["SENDER_EMAIL"]
