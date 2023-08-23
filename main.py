@@ -539,11 +539,11 @@ async def download_csv(csv_file_path: str):
     print("CSV file path:", csv_file_path)
     # Check if the CSV file exists
     if os.path.exists(csv_file_path):
+        os.system(f"cp {csv_file_path} {download_path}")
+    else:
         raise HTTPException(status_code=404, detail="CSV file not found")
     headers = {
-    "file_download_status" : "Sucess"}
-
-    return headers
+        "file_download_status": "Sucess"}
 
 # @app.get("/search")
 # async def search_pubmed(filter_type: str = Query(..., title="Filter Type")):
