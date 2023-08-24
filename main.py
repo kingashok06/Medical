@@ -1,44 +1,42 @@
-from fastapi import FastAPI,HTTPException,Response,Request,Depends,Query
+from fastapi import FastAPI,HTTPException,Request,Depends
 from routes.user_routes import user
-from config.db import collection,EMAIL_CONFIG
-from pydantic import ValidationError
+from config.db import collection#EMAIL_CONFIG
 from models.user_model import User,login,ChangePasswordRequest,UserProfile,AddMonitor,TeamCreate, TeamMember
-import smtplib
 from email.mime.text import MIMEText
-from bson import ObjectId
-import jwt
-import bcrypt
-from bson import ObjectId
+import jwt,bcrypt,time,re,smtplib
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Dict
-import time
-from fastapi.responses import JSONResponse,RedirectResponse
+from fastapi.responses import JSONResponse
 from starlette.requests import Request
 from datetime import datetime, timedelta
 from jose import JWTError
-import pandas as pd
-from fastapi import File, UploadFile
-from io import BytesIO
-import re
-from fastapi import FastAPI
-from pydantic import BaseModel, EmailStr
-from pymongo import MongoClient
 from bson import ObjectId
-
+from dotenv import load_dotenv
+from decouple import config
+# Load environment variables from .env file
+load_dotenv('.env')
 
 
 app = FastAPI()
 
-
 app.include_router(user)
 
+# Read environment variables from the .env file
+SECRET_KEY = config('SECRET_KEY')
+ALGORITHM = config('ALGORITHM')
+ACCESS_TOKEN_EXPIRE_MINUTES = config('ACCESS_TOKEN_EXPIRE_MINUTES', cast=int)
+SMTP_SERVER = config('SMTP_SERVER')
+SMTP_PORT = config('SMTP_PORT', cast=int)
+SENDER_EMAIL = config('SENDER_EMAIL')
+SENDER_PASSWORD = config('SENDER_PASSWORD')
 
-SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+"""
+    Custom FastAPI Bearer token authentication middleware for JWT (JSON Web Tokens).
 
-    
-
+    This class extends FastAPI's HTTPBearer class to perform JWT token validation.
+    It verifies the presence and format of the JWT token, and checks if it is a valid and
+    non-expired token. If all checks pass, it extracts the user information from the token.
+"""
 class JWTBearer(HTTPBearer):
     def __init__(self, auto_error: bool = True):
         super(JWTBearer, self).__init__(auto_error=auto_error)
@@ -56,6 +54,7 @@ class JWTBearer(HTTPBearer):
 
     def verify_jwt(self, jwtoken: str) -> bool:
         try:
+             # Verify and decode the JWT token using the provided secret key.
             payload = jwt.decode(jwtoken, SECRET_KEY, algorithms=[ALGORITHM])
             return True
         except JWTError:
@@ -63,27 +62,30 @@ class JWTBearer(HTTPBearer):
 
     def extract_user_id(self, jwtoken: str) -> dict:
         try:
+             # Extract user information from the JWT token's payload.
             payload = jwt.decode(jwtoken, SECRET_KEY, algorithms=[ALGORITHM])
             return payload  # Return the entire payload, including user information
         except JWTError:
             raise HTTPException(status_code=401, detail="Invalid token or expired token.")
 
 
+# Function to generate a token response
 def token_response(token: str):
     return {
         "access_token": token
     }
 
-# function used for signing the JWT string
+# Function to sign a JWT token with user information
 def signJWT(user_id: str) -> Dict[str, str]:
     payload = {
         "user_id": user_id,
-        "expires": time.time() + 600
+        "expires": time.time() + 600  # Token expiration time (e.g., 10 minutes) 
     }
     token = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
     return token_response(token)
 
+# Function to decode a JWT token
 def decodeJWT(token: str) -> dict:
     try:
         decoded_token = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -99,7 +101,7 @@ def check_user(data: login):
     return False
 
   
-
+# Endpoint for user registration
 @app.post("/register/")
 async def register_user(user: User):
     # Check if the user already exists based on email, username, or contact number
@@ -113,7 +115,7 @@ async def register_user(user: User):
              raise HTTPException(status_code=400, detail="Contact number already exists")
         
      
-    
+    # Validate user contact information
     def validate_contact(contact):
         return len(str(contact)) == 10 
     
@@ -121,13 +123,16 @@ async def register_user(user: User):
         error_msg = "Invalid contact number. Contact number should have exactly 10 digits."
         raise HTTPException(status_code=400, detail=error_msg)
     
+    # Validate user password complexity
     pattern = r"^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]+$"
     if not re.match(pattern, user.password):
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters long and contain at least one letter, one digit, and one special character.")
 
+    # Generate a confirmation token and hash the user's password
     confirmation_token = str(ObjectId())
     hashed_password = bcrypt.hashpw(user.password.encode("utf-8"), bcrypt.gensalt())
 
+    # Prepare user data for database insertion
     user_data = {
         "username": user.username,
         "contact": user.contact,
@@ -150,26 +155,25 @@ async def register_user(user: User):
     return {"message": "User registered successfully", "user_id": str(result.inserted_id)} #"JWT_TOKEN": signJWT(user.email)
 
 
-
+# Function to send a confirmation email
 def send_confirmation_email(to_email: str, confirmation_link: str):
     subject = "Account Confirmation"
     body = f"Hello,\n\nThank you for registering with our service. Your account has been successfully created.\n\nPlease click on the link below to confirm your email address:\n\n{confirmation_link}"
 
     msg = MIMEText(body)
-    msg["From"] = EMAIL_CONFIG["SENDER_EMAIL"]
+    msg["From"] = SENDER_EMAIL  # Use the variable you defined
     msg["To"] = to_email
     msg["Subject"] = subject
 
     # Connect to the SMTP server and send the email
-    with smtplib.SMTP(EMAIL_CONFIG["SMTP_SERVER"], EMAIL_CONFIG["SMTP_PORT"]) as server:
+    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:  # Use the variables you defined
         server.starttls()
-        server.login(EMAIL_CONFIG["SENDER_EMAIL"], EMAIL_CONFIG["SENDER_PASSWORD"])
-        server.sendmail(EMAIL_CONFIG["SENDER_EMAIL"], to_email, msg.as_string())
+        server.login(SENDER_EMAIL, SENDER_PASSWORD)  # Use the variables you defined
+        server.sendmail(SENDER_EMAIL, to_email, msg.as_string())
 
 
-
-@app.post("/login/") #dependencies=[Depends(JWTBearer())]
-# async def login_user(login_data: login):
+# Endpoint for user login
+@app.post("/login/")
 async def login_user(login_data: login):
 
     username = login_data.username
@@ -332,7 +336,6 @@ async def add_monitor(
 
             
 
-
 @app.get('/user_monitors/{username}/{monitor_name}', response_model=list[dict])
 async def get_user_monitor(
     username: str,
@@ -420,7 +423,7 @@ async def delete_user_monitor(
         raise HTTPException(status_code=403, detail="Access denied: You can only delete your own data")
 
 
-#3######################################################################################################################3
+#3###################################################################################################################258258258###3
 
 @app.post('/create_team')
 async def create_team(team: TeamCreate, current_user: dict = Depends(JWTBearer())):
@@ -490,20 +493,23 @@ async def add_member_to_team(member: TeamMember):
     )
     return {"message": f"{user['username']} added to the team."}
 
+
+
+# Function to send a confirmation email
 def send_confirmation_email(to_email: str, confirmation_link: str):
-    subject = "Account Created"
-    body = f"Hello,\n\nYour have  been successfully added to the team.\n\nPlease click on the link below to confirm your email address:\n\n{confirmation_link}"
+    subject = "Account Confirmation"
+    body = f"Hello,\n\nTYour  been successfully added to the team.\n\nPlease click on the link below to confirm your email address:\n\n{confirmation_link}"
 
     msg = MIMEText(body)
-    msg["From"] = EMAIL_CONFIG["SENDER_EMAIL"]
+    msg["From"] = SENDER_EMAIL  # Use the variable you defined
     msg["To"] = to_email
     msg["Subject"] = subject
 
     # Connect to the SMTP server and send the email
-    with smtplib.SMTP(EMAIL_CONFIG["SMTP_SERVER"], EMAIL_CONFIG["SMTP_PORT"]) as server:
+    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:  # Use the variables you defined
         server.starttls()
-        server.login(EMAIL_CONFIG["SENDER_EMAIL"], EMAIL_CONFIG["SENDER_PASSWORD"])
-        server.sendmail(EMAIL_CONFIG["SENDER_EMAIL"], to_email, msg.as_string())
+        server.login(SENDER_EMAIL, SENDER_PASSWORD)  # Use the variables you defined
+        server.sendmail(SENDER_EMAIL, to_email, msg.as_string())
 
 @app.delete('/remove_member_from_team')
 async def remove_member_from_team(member: TeamMember, current_user: dict = Depends(JWTBearer())):

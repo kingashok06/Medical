@@ -12,10 +12,10 @@ collection = db["users"]
 
 
 
-EMAIL_CONFIG = {
-    "SMTP_SERVER": "smtp.gmail.com",
-    "SMTP_PORT": 587,
-    "SENDER_EMAIL": "rajps@infusionanalysts.com",
-    "SENDER_PASSWORD": "xcscmpccrpjxkeaq",
-}
+# EMAIL_CONFIG = {
+#     "SMTP_SERVER": "smtp.gmail.com",
+#     "SMTP_PORT": 587,
+#     "SENDER_EMAIL": "rajps@infusionanalysts.com",
+#     "SENDER_PASSWORD": "xcscmpccrpjxkeaq",
+# }
 
