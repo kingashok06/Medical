@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 from fastapi import FastAPI,HTTPException,Response,Request,Depends  
 from routes.user_routes import user
 from config.db import collection,EMAIL_CONFIG
@@ -233,3 +234,11 @@ async def get_user_profile(username: str):
 
 
 
+=======
+from fastapi import FastAPI
+from routes.user_routes import routes
+
+
+app = FastAPI()
+app.include_router(routes)
+>>>>>>> 732d2d0 (Team_APIs)
