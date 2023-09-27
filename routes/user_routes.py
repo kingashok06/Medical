@@ -17,6 +17,7 @@ from models.auth import Token
 
 routes = APIRouter()
 
+
 routes.on_event("startup")(startup_event)
 routes.on_event("shutdown")(shutdown_event)
 routes.post("/verify-otp")(verify_otp_endpoint)
